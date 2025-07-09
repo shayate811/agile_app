@@ -4,13 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"fmt"
+	"time"
 )
 
 type Task struct {
 	ID    int    `json:"id"`
 	Title string `json:"title"`
 	Done  bool   `json:"done"`
+	SprintNumber int    `json:"sprint_number,omitempty"` // Optional field for sprint number
+	TaskWeight int    `json:"task_weight,omitempty"` // Optional field for task weight
 }
 
 const dataFile = "todo.json"
@@ -51,7 +53,7 @@ func nextID(tasks []Task) int {
 	return maxID + 1
 }
 
-func AddTask(title string) {
+func AddTask(title string, sprintNumber int, taskWeight int) {
 	tasks, err := loadTasks()
 	if err != nil {
 		panic(err)
@@ -61,6 +63,8 @@ func AddTask(title string) {
 		ID:    nextID(tasks),
 		Title: title,
 		Done:  false,
+		SprintNumber: sprintNumber, // Default value for sprint number
+		TaskWeight: taskWeight, // Default value for task weight
 	}
 	tasks = append(tasks, newTask)
 
@@ -134,5 +138,13 @@ func DeleteTask(id int) {
 	if err := saveTasks(newTasks); err != nil {
 		panic(err)
 	}
+}
 
+func TimerStart(min int) {
+totalSec := min * 60
+for i := totalSec; i > 0; i-- {
+	fmt.Printf("\r残り: %d分%d秒", i/60, i%60)
+	time.Sleep(1 * time.Second)
+}
+fmt.Println("\nタイマー終了")	
 }
