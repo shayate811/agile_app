@@ -3,15 +3,17 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/olekukonko/tablewriter"
 	"os"
+	"strconv"
 )
 
 type Task struct {
-	ID    int    `json:"id"`
-	Title string `json:"title"`
-	Done  bool   `json:"done"`
+	ID           int    `json:"id"`
+	Title        string `json:"title"`
+	Done         bool   `json:"done"`
 	SprintNumber int    `json:"sprint_number,omitempty"` // Optional field for sprint number
-	TaskWeight int    `json:"task_weight,omitempty"` // Optional field for task weight
+	TaskWeight   int    `json:"task_weight,omitempty"`   // Optional field for task weight
 }
 
 const dataFile = "todo.json"
@@ -59,11 +61,11 @@ func AddTask(title string, sprintNumber int, taskWeight int) {
 	}
 
 	newTask := Task{
-		ID:    nextID(tasks),
-		Title: title,
-		Done:  false,
+		ID:           nextID(tasks),
+		Title:        title,
+		Done:         false,
 		SprintNumber: sprintNumber, // Default value for sprint number
-		TaskWeight: taskWeight, // Default value for task weight
+		TaskWeight:   taskWeight,   // Default value for task weight
 	}
 	tasks = append(tasks, newTask)
 
@@ -78,13 +80,25 @@ func ListTasks() {
 		panic(err)
 	}
 
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader([]string{"ID", "Title", "Sprint_Number", "Task_Weight", "Status"})
+
 	for _, task := range tasks {
 		status := "[ ]"
 		if task.Done {
 			status = "[x]"
 		}
-		fmt.Printf("%d: %s %s\n", task.ID, task.Title, status)
+		row := []string{
+			strconv.Itoa(task.ID),
+			task.Title,
+			strconv.Itoa(task.SprintNumber),
+			strconv.Itoa(task.TaskWeight),
+			status,
+		}
+		table.Append(row)
 	}
+
+	table.Render()
 }
 
 func CompleteTask(id int) {
