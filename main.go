@@ -36,6 +36,9 @@ func main() {
 	case "delete":
 		id, _ := strconv.Atoi(os.Args[2])
 		DeleteTask(id)
+	case "timerstart":
+		time, _ := strconv.Atoi(os.Args[2])
+		TimerStart(time)
 	default:
 		fmt.Println("Unknown command:", cmd)
 	}
