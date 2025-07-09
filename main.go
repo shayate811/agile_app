@@ -16,8 +16,18 @@ func main() {
 
 	switch cmd {
 	case "add":
+		if len(os.Args) < 5 {
+			fmt.Println("Usage: todo add <title> <sprintNumber> <taskWeight>")
+			return
+		}
 		title := os.Args[2]
-		AddTask(title)
+		sprintNumber, err1 := strconv.Atoi(os.Args[3])
+		taskWeight, err2 := strconv.Atoi(os.Args[4])
+		if err1 != nil || err2 != nil {
+			fmt.Println("sprintNumberとtaskWeightは数値で指定してください")
+			return
+		}
+		AddTask(title, sprintNumber, taskWeight)
 	case "list":
 		ListTasks()
 	case "complete":
