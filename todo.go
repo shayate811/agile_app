@@ -148,3 +148,35 @@ for i := totalSec; i > 0; i-- {
 }
 fmt.Println("\nタイマー終了")	
 }
+
+func TimerStartSprint() {
+    // スプリントタイムボックス: 90分
+    fmt.Println("=== スプリントタイムボックス開始（90分） ===")
+
+    // スプリント計画: 15分
+    fmt.Println("スプリント計画（15分）を開始します")
+    timerMinutes(1)
+    fmt.Println("スプリント計画が終了しました")
+
+    // 開発: 60分
+    fmt.Println("開発（60分）を開始します")
+    timerMinutes(60)
+    fmt.Println("開発が終了しました")
+
+    // スプリントレビュー + 振り返り: 15分
+    fmt.Println("スプリントレビュー＋振り返り（15分）を開始します")
+    timerMinutes(15)
+    fmt.Println("スプリントレビュー＋振り返りが終了しました")
+
+    fmt.Println("=== スプリントタイムボックス終了 ===")
+}
+
+// 分数を受け取ってタイマー表示する補助関数
+func timerMinutes(min int) {
+    totalSec := min * 60
+    for i := totalSec; i > 0; i-- {
+        fmt.Printf("\r残り: %d分%d秒", i/60, i%60)
+        time.Sleep(1 * time.Second)
+    }
+    fmt.Println("\nタイマー終了")
+}
