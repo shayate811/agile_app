@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/olekukonko/tablewriter"
 	"os"
+	"time"
 	"strconv"
 )
 
@@ -151,5 +152,13 @@ func DeleteTask(id int) {
 	if err := saveTasks(newTasks); err != nil {
 		panic(err)
 	}
+}
 
+func TimerStart(min int) {
+totalSec := min * 60
+for i := totalSec; i > 0; i-- {
+	fmt.Printf("\r残り: %d分%d秒", i/60, i%60)
+	time.Sleep(1 * time.Second)
+}
+fmt.Println("\nタイマー終了")	
 }
