@@ -4,7 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/olekukonko/tablewriter"
+	"gonum.org/v1/plot"
+	"gonum.org/v1/plot/plotter"
+	"gonum.org/v1/plot/vg"
 	"os"
+	"sort"
 	"strconv"
 	"time"
 )
@@ -259,4 +263,94 @@ func TimerSetting(planningTime, developmentTime, reviewTime int) {
 	if err := json.NewEncoder(file).Encode(timerSettings); err != nil {
 		panic(err)
 	}
+}
+
+func ShowProgress() {
+    tasks, err := loadTasks()
+    if err != nil {
+        panic(err)
+    }
+
+    // assigneeごとに重みを集計
+    type progress struct {
+        doneWeight  int
+        totalWeight int
+    }
+    progressMap := make(map[string]*progress)
+
+    for _, task := range tasks {
+        name := task.Assignees
+        if name == "" {
+            continue // 未割り当てタスクは集計しない
+        }
+        if _, ok := progressMap[name]; !ok {
+            progressMap[name] = &progress{}
+        }
+        progressMap[name].totalWeight += task.TaskWeight
+        if task.Done {
+            progressMap[name].doneWeight += task.TaskWeight
+        }
+    }
+
+    // 表示用にソート
+    names := make([]string, 0, len(progressMap))
+    for name := range progressMap {
+        names = append(names, name)
+    }
+    sort.Strings(names)
+
+    // テーブル表示
+    fmt.Println("作業者\t完了重み/担当重み\t進捗率")
+    fmt.Println("-------------------------------------")
+    for _, name := range names {
+        p := progressMap[name]
+        rate := 0
+        if p.totalWeight > 0 {
+            rate = p.doneWeight * 100 / p.totalWeight
+        }
+        fmt.Printf("%s\t%d/%d\t\t%d%%\n", name, p.doneWeight, p.totalWeight, rate)
+    }
+
+    // グラフ用データ作成
+    values := make(plotter.Values, len(names))
+    for i, name := range names {
+        p := progressMap[name]
+        var rate float64
+        if p.totalWeight > 0 {
+            rate = float64(p.doneWeight) / float64(p.totalWeight) * 100
+        }
+        values[i] = rate
+    }
+
+    // グラフ生成
+    p := plot.New()
+    p.Title.Text = "Progress by Assignee"
+    p.Y.Label.Text = "Progress (%)"
+
+    // 横軸に作業者名を表示
+    p.NominalX(names...)
+
+    bar, err := plotter.NewBarChart(values, vg.Points(30))
+    if err != nil {
+        fmt.Println("グラフ生成に失敗しました:", err)
+        return
+    }
+    bar.LineStyle.Width = vg.Length(0)
+    p.Add(bar)
+    p.Y.Max = 100
+
+    // 横軸ラベルの角度を調整
+    p.X.Tick.Label.Rotation = 0.5 // 0.5ラジアン（約30度）傾ける
+
+    // 余白を設定（左右に0.2インチずつ余白を追加）
+    p.X.Padding = vg.Points(40)
+    p.X.Min = -0.5
+    p.X.Max = float64(len(names)) - 0.5
+
+    // グラフ画像として保存
+    if err := p.Save(8*vg.Inch, 4*vg.Inch, "progress.png"); err != nil {
+        fmt.Println("グラフ画像の保存に失敗しました:", err)
+        return
+    }
+    fmt.Println("進捗グラフ(progress.png)を出力しました。")
 }
