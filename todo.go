@@ -7,6 +7,8 @@ import (
 	"os"
 	"strconv"
 	"time"
+	"bufio"
+	"context"
 )
 
 type Task struct {
@@ -218,6 +220,12 @@ func TimerStartSprint() {
             settings["planning"], settings["development"], settings["review"])
     }
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // 安全のため
+
+	// ── 入力受付を並列実行
+	go listenInput(ctx, cancel)
+
 	fmt.Printf("スプリントプランニング（%d分）を開始します\n", settings["planning"])
     timerMinutes(settings["planning"])
     fmt.Println("スプリント計画が終了しました")
@@ -258,5 +266,67 @@ func TimerSetting(planningTime, developmentTime, reviewTime int) {
 
 	if err := json.NewEncoder(file).Encode(timerSettings); err != nil {
 		panic(err)
+	}
+}
+
+func listenInput(ctx context.Context, cancel context.CancelFunc) {
+	sc := bufio.NewScanner(os.Stdin)
+	for {
+		fmt.Print("\nコマンド > ")
+		if !sc.Scan() {
+			cancel();
+			return
+		}
+		inputs := strings.Split(sc.Text(), " ")
+		if len(inputs) < 1 {
+			fmt.Println("Help Command: [help]")
+			return
+		}
+
+		switch inputs[0] {
+		case "add":
+			if len(inputs) < 4 {
+				fmt.Println("Usage: add <title> <sprintNumber> <taskWeight>")
+				return
+			}
+			title := inputs[1]
+			sprintNumber, err1 := strconv.Atoi(inputs[2])
+			taskWeight, err2 := strconv.Atoi(inputs[3])
+			if err1 != nil || err2 != nil {
+				fmt.Println("sprintNumberとtaskWeightは数値で指定してください")
+				return
+			}
+			AddTask(title, sprintNumber, taskWeight)
+		case "list":
+			ListTasks()
+		case "assign":
+			id, _ := strconv.Atoi(inputs[1])
+			name := ""
+			if len(inputs) >= 3 {
+				name = inputs[2]
+			}
+			AssignTask(id, name)
+		case "complete":
+			id, _ := strconv.Atoi(inputs[1])
+			CompleteTask(id)
+		case "delete":
+			id, _ := strconv.Atoi(inputs[1])
+			DeleteTask(id)
+		case "exit":
+			fmt.Println("exit sprint.")
+			cancel()
+			return
+		case "help":
+			fmt.println("<Usage>\nAddTask : add <title> <sprintNumber> <taskWeight> ")
+		default:
+			fmt.Println("不明なコマンド")
+		}
+
+		// タイマーが先に終わっていないかチェック
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 	}
 }

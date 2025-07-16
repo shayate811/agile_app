@@ -35,6 +35,9 @@ func main() {
 		name := ""
 		if len(os.Args) >= 4 {
 			name = os.Args[3]
+		} else {
+			fmt.Println("Usage: todo assign <taskID> <name>")
+			return
 		}
 		AssignTask(id, name)
 	case "complete":
