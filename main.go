@@ -39,6 +39,10 @@ func main() {
 	case "timerstart":
 		TimerStartSprint()
 	case "timersetting":
+		if len(os.Args) < 5 {
+			fmt.Println("Usage: todo timersetting <planningTime> <developmentTime> <reviewTime>")
+			return
+		}
 		planningTime, _ := strconv.Atoi(os.Args[2])
 		developmentTime, _ := strconv.Atoi(os.Args[3])
 		reviewTime, _ := strconv.Atoi(os.Args[4])
