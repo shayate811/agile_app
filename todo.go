@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"github.com/olekukonko/tablewriter"
 	"os"
-	"time"
 	"strconv"
+	"time"
 )
 
 type Task struct {
@@ -15,6 +15,7 @@ type Task struct {
 	Done         bool   `json:"done"`
 	SprintNumber int    `json:"sprint_number,omitempty"` // Optional field for sprint number
 	TaskWeight   int    `json:"task_weight,omitempty"`   // Optional field for task weight
+	Assignees    string `json:"assignees"`
 }
 
 const dataFile = "todo.json"
@@ -100,7 +101,7 @@ func ListTasks() {
 	}
 
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"ID", "Title", "Sprint_Number", "Task_Weight", "Status"})
+	table.SetHeader([]string{"ID", "Title", "Sprint_Number", "Task_Weight", "Assignees", "Status"})
 
 	for _, task := range tasks {
 		status := "[ ]"
@@ -112,12 +113,38 @@ func ListTasks() {
 			task.Title,
 			strconv.Itoa(task.SprintNumber),
 			strconv.Itoa(task.TaskWeight),
+			task.Assignees,
 			status,
 		}
 		table.Append(row)
 	}
 
 	table.Render()
+}
+
+func AssignTask(id int, name string) {
+	tasks, err := loadTasks()
+	if err != nil {
+		panic(err)
+	}
+
+	isExist := false
+
+	for i, t := range tasks {
+		if t.ID == id {
+			tasks[i].Assignees = name
+			isExist = true
+			break
+		}
+	}
+
+	if !isExist {
+		fmt.Print("task not found")
+	}
+
+	if err := saveTasks(tasks); err != nil {
+		panic(err)
+	}
 }
 
 func CompleteTask(id int) {
