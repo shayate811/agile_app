@@ -38,6 +38,11 @@ func main() {
 		DeleteTask(id)
 	case "timerstart":
 		TimerStartSprint()
+	case "timersetting":
+		planningTime, _ := strconv.Atoi(os.Args[2])
+		developmentTime, _ := strconv.Atoi(os.Args[3])
+		reviewTime, _ := strconv.Atoi(os.Args[4])
+		TimerSetting(planningTime, developmentTime, reviewTime)
 	default:
 		fmt.Println("Unknown command:", cmd)
 	}
