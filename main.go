@@ -44,8 +44,16 @@ func main() {
 		id, _ := strconv.Atoi(os.Args[2])
 		DeleteTask(id)
 	case "timerstart":
-		time, _ := strconv.Atoi(os.Args[2])
-		TimerStart(time)
+		TimerStartSprint()
+	case "timersetting":
+		if len(os.Args) < 5 {
+			fmt.Println("Usage: todo timersetting <planningTime> <developmentTime> <reviewTime>")
+			return
+		}
+		planningTime, _ := strconv.Atoi(os.Args[2])
+		developmentTime, _ := strconv.Atoi(os.Args[3])
+		reviewTime, _ := strconv.Atoi(os.Args[4])
+		TimerSetting(planningTime, developmentTime, reviewTime)
 	default:
 		fmt.Println("Unknown command:", cmd)
 	}
