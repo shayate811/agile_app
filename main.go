@@ -30,6 +30,13 @@ func main() {
 		AddTask(title, sprintNumber, taskWeight)
 	case "list":
 		ListTasks()
+	case "assign":
+		id, _ := strconv.Atoi(os.Args[2])
+		name := ""
+		if len(os.Args) >= 4 {
+			name = os.Args[3]
+		}
+		AssignTask(id, name)
 	case "complete":
 		id, _ := strconv.Atoi(os.Args[2])
 		CompleteTask(id)
@@ -47,6 +54,8 @@ func main() {
 		developmentTime, _ := strconv.Atoi(os.Args[3])
 		reviewTime, _ := strconv.Atoi(os.Args[4])
 		TimerSetting(planningTime, developmentTime, reviewTime)
+	case "progress":
+		ShowProgress()
 	default:
 		fmt.Println("Unknown command:", cmd)
 	}
