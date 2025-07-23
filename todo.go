@@ -178,6 +178,70 @@ func ListTasks() {
 	table.Render()
 }
 
+func ListDoingTasks(sprint int) {
+	tasks, err := loadTasks()
+	if err != nil {
+		panic(err)
+	}
+
+	// フィルタ & グループ分け
+	todo := []Task{}
+	doing := []Task{}
+	done := []Task{}
+	for _, task := range tasks {
+		if task.SprintNumber <= sprint {
+			if task.Done == true {
+				done = append(done, task)
+			} else if strings.TrimSpace(task.Assignees) == "" {
+				todo = append(todo, task)
+			} else {
+				doing = append(doing, task)
+			}
+		}
+	}
+
+	// ソート（どちらも同様に）
+	sortTasks := func(ts []Task) {
+		sort.Slice(ts, func(i, j int) bool {
+			if ts[i].SprintNumber == ts[j].SprintNumber {
+				return ts[i].ID < ts[j].ID
+			}
+			return ts[i].SprintNumber < ts[j].SprintNumber
+		})
+	}
+	sortTasks(todo)
+	sortTasks(doing)
+	sortTasks(done)
+
+	// 表示関数
+	renderTable := func(title string, ts []Task) {
+		fmt.Printf("\n=== %s ===\n", title)
+		table := tablewriter.NewWriter(os.Stdout)
+		table.SetHeader([]string{"ID", "Title", "Sprint", "Weight", "Assignees", "Status"})
+		for _, t := range ts {
+			status := "[ ]"
+			if t.Done {
+				status = "[x]"
+			}
+			row := []string{
+				strconv.Itoa(t.ID),
+				t.Title,
+				strconv.Itoa(t.SprintNumber),
+				strconv.Itoa(t.TaskWeight),
+				t.Assignees,
+				status,
+			}
+			table.Append(row)
+		}
+		table.Render()
+	}
+
+	// 出力
+	renderTable("Todo", todo)
+	renderTable("Doing", doing)
+	renderTable("Done", done)
+}
+
 func AssignTask(id int, name string) {
 	tasks, err := loadTasks()
 	if err != nil {
@@ -288,6 +352,7 @@ func TimerStartSprint() {
 		fmt.Println("スプリント計画が終了しました")
 
 		fmt.Println("開発（%d分）を開始します", settings["development"])
+		ListDoingTasks(settings["sprint_number"])
 		timerMinutes(settings["development"])
 		fmt.Println("開発が終了しました")
 
@@ -296,11 +361,24 @@ func TimerStartSprint() {
 		fmt.Println("スプリントレビュー＋振り返りが終了しました")
 
 		fmt.Println("=== スプリントタイムボックス終了 ===")
+
+		settings["sprint_number"] += 1
+
+		file, err := os.Create(timersettingFile)
+		if err != nil {
+			panic(err)
+		}
+		defer file.Close()
+
+		if err := json.NewEncoder(file).Encode(settings); err != nil {
+			panic(err)
+		}
 		cancel()
 
 	}()
 
 	<-ctx.Done()
+
 }
 
 // 分数を受け取ってタイマー表示する補助関数
