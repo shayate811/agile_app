@@ -214,11 +214,12 @@ func TimerStartSprint() {
 			"planning":    15, // スプリント計画: 15分
 			"development": 60, // 開発: 60分
 			"review":      15, // スプリントレビュー＋振り返り: 15分
+			"sprint_number": 0,
 		}
 		fmt.Println("タイマー設定ファイルが見つからないため、デフォルト値を使用します。")
 	} else {
-		fmt.Printf("スプリント計画: %d分, 開発: %d分, スプリントレビュー＋振り返り: %d分\n",
-			settings["planning"], settings["development"], settings["review"])
+		fmt.Printf("スプリント番号 : %d, スプリント計画: %d分, 開発: %d分, スプリントレビュー＋振り返り: %d分\n",
+			settings["sprint_number"], settings["planning"], settings["development"], settings["review"])
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -260,10 +261,21 @@ func timerMinutes(min int) {
 }
 
 func TimerSetting(planningTime, developmentTime, reviewTime int) {
+	settings, err := loadTimerSettings()
+	if err != nil {
+		panic(err)
+	}
+
 	timerSettings := map[string]int{
 		"planning":    planningTime,
 		"development": developmentTime,
 		"review":      reviewTime,
+	}
+
+	if settings == nil {
+		timerSettings["sprint_number"] = 1
+	} else {
+		timerSettings["sprint_number"] = settings["sprint_number"]
 	}
 
 	file, err := os.Create(timersettingFile)
