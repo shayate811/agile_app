@@ -56,6 +56,8 @@ func main() {
 		TimerSetting(planningTime, developmentTime, reviewTime)
 	case "progress":
 		ShowProgress()
+	case "contribution":
+		ShowContribution()
 	default:
 		fmt.Println("Unknown command:", cmd)
 	}

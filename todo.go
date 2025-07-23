@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/benoitmasson/plotters/piechart"
 	"github.com/olekukonko/tablewriter"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
@@ -11,6 +12,10 @@ import (
 	"sort"
 	"strconv"
 	"time"
+	"image/color"
+	"log"
+	"hash/fnv"
+	"math"
 )
 
 type Task struct {
@@ -24,6 +29,50 @@ type Task struct {
 
 const dataFile = "todo.json"
 const timersettingFile = "timer_setting.json"
+
+// ColorFromName は人名を安定した色(RGBA)に変換します。
+// 同じ name を渡せば常に同じ色が返ります。
+func ColorFromName(name string) color.RGBA {
+	// 1) 64bit FNV ハッシュ
+	h := fnv.New64a()
+	h.Write([]byte(name))
+	hash := h.Sum64()
+ 
+	// 2) ハッシュ値 → 0–359 の Hue
+	hue := float64(hash % 360)
+	sat := 0.55 // 彩度
+	light := 0.60 // 輝度
+ 
+	return hslToRGBA(hue, sat, light)
+}
+ 
+// --- 内部関数: HSL → RGBA -----------------------------------------
+func hslToRGBA(h, s, l float64) color.RGBA {
+	c := (1 - math.Abs(2*l-1)) * s
+	x := c * (1 - math.Abs(math.Mod(h/60, 2)-1))
+	m := l - c/2
+	var r, g, b float64
+	switch {
+	case 0 <= h && h < 60:
+		r, g, b = c, x, 0
+	case 60 <= h && h < 120:
+		r, g, b = x, c, 0
+	case 120 <= h && h < 180:
+		r, g, b = 0, c, x
+	case 180 <= h && h < 240:
+		r, g, b = 0, x, c
+	case 240 <= h && h < 300:
+		r, g, b = x, 0, c
+	default: // 300‑360
+		r, g, b = c, 0, x
+	}
+	return color.RGBA{
+		R: uint8((r + m) * 255),
+		G: uint8((g + m) * 255),
+		B: uint8((b + m) * 255),
+		A: 255,
+	}
+}
 
 func loadTasks() ([]Task, error) {
 	file, err := os.Open(dataFile)
@@ -312,37 +361,35 @@ func ShowProgress() {
     }
 
     // グラフ用データ作成
-    values := make(plotter.Values, len(names))
-    for i, name := range names {
-        p := progressMap[name]
-        var rate float64
-        if p.totalWeight > 0 {
-            rate = float64(p.doneWeight) / float64(p.totalWeight) * 100
-        }
-        values[i] = rate
-    }
-
-    // グラフ生成
     p := plot.New()
     p.Title.Text = "Progress by Assignee"
     p.Y.Label.Text = "Progress (%)"
-
-    // 横軸に作業者名を表示
     p.NominalX(names...)
 
-    bar, err := plotter.NewBarChart(values, vg.Points(30))
-    if err != nil {
-        fmt.Println("グラフ生成に失敗しました:", err)
-        return
+    // 各作業者ごとに1本ずつBarChartを重ねて色分け
+    for i, name := range names {
+        prog := progressMap[name]
+        var rate float64
+        if prog.totalWeight > 0 {
+            rate = float64(prog.doneWeight) / float64(prog.totalWeight) * 100
+        }
+        vals := make(plotter.Values, len(names))
+        vals[i] = rate // 他は0
+        bar, err := plotter.NewBarChart(vals, vg.Points(30))
+        if err != nil {
+            fmt.Println("グラフ生成に失敗しました:", err)
+            return
+        }
+        bar.LineStyle.Width = vg.Length(0)
+        bar.Color = ColorFromName(name) // 名前から色を取得
+        p.Add(bar)
     }
-    bar.LineStyle.Width = vg.Length(0)
-    p.Add(bar)
     p.Y.Max = 100
 
     // 横軸ラベルの角度を調整
     p.X.Tick.Label.Rotation = 0.5 // 0.5ラジアン（約30度）傾ける
 
-    // 余白を設定（左右に0.2インチずつ余白を追加）
+    // 余白を設定
     p.X.Padding = vg.Points(40)
     p.X.Min = -0.5
     p.X.Max = float64(len(names)) - 0.5
@@ -353,4 +400,99 @@ func ShowProgress() {
         return
     }
     fmt.Println("進捗グラフ(progress.png)を出力しました。")
+}
+
+func ShowContribution() {
+	// ==== 1. タスク読み込み & 集計 ==========================================
+	tasks, err := loadTasks()
+	if err != nil {
+		log.Fatalf("loadTasks 失敗: %v", err)
+	}
+ 
+	contrib := make(map[string]float64)
+	var unfinishedWeight float64
+ 
+	for _, t := range tasks {
+		if t.Done {
+			name := t.Assignees
+			if name == "" {
+				name = "Unassigned"
+			}
+			contrib[name] += float64(t.TaskWeight)
+		} else {
+			unfinishedWeight += float64(t.TaskWeight)
+		}
+	}
+ 
+	// ==== 2. 円グラフ用データ作成 ==========================================
+	labels := make([]string, 0, len(contrib)+1)
+	values := make(plotter.Values, 0, len(contrib)+1)
+ 
+	for n, w := range contrib {
+		labels = append(labels, n)
+		values = append(values, w)
+	}
+	if unfinishedWeight > 0 {
+		labels = append(labels, "Unfinished")
+		values = append(values, unfinishedWeight)
+	}
+ 
+	// ==== 3. グラフベース生成 ==============================================
+	p := plot.New()
+	p.Title.Text = "Task Contribution"
+	p.HideAxes() // 円グラフなので軸は非表示
+ 
+	// ==== 4. スライスごとに PieChart を生成して色分け =======================
+	total := 0.0
+	for _, v := range values {
+		total += v
+	}
+ 
+	offset := 0.0
+ 
+	for i, v := range values {
+		// 4‑1) 1スライスだけをもつ PieChart を生成
+		pc, err := piechart.NewPieChart(plotter.Values{v})
+		if err != nil {
+			log.Fatalf("piechart 生成失敗: %v", err)
+		}
+ 
+		// 4‑2) 色と開始位置・合計値を設定
+		pc.Color = ColorFromName(labels[i])
+		pc.Offset.Value = offset
+		pc.Total = total
+ 
+		// 4‑3) ラベル表示設定
+		pc.Labels.Show = true
+		pc.Labels.Nominal = []string{labels[i]}
+		pc.Labels.Values.Show = true
+		pc.Labels.Values.Percentage = true // 割合表示
+ 
+		// 4‑4) 追加
+		p.Add(pc)
+		offset += v
+	}
+ 
+	// ==== 5. 保存 ==========================================================
+	if err := p.Save(6*vg.Inch, 6*vg.Inch, "contribution.png"); err != nil {
+		log.Fatalf("画像保存失敗: %v", err)
+	}
+	fmt.Println("貢献度円グラフを出力しました → contribution.png")
+}
+ 
+// defaultColors は必要数だけ色を返す簡易パレット
+func defaultColors(n int) []color.Color {
+	base := []color.Color{
+		color.RGBA{255, 99, 132, 255},  // 赤
+		color.RGBA{54, 162, 235, 255},  // 青
+		color.RGBA{255, 206, 86, 255},  // 黄
+		color.RGBA{75, 192, 192, 255},  // 緑
+		color.RGBA{153, 102, 255, 255}, // 紫
+		color.RGBA{255, 159, 64, 255},  // オレンジ
+	}
+	out := make([]color.Color, n)
+	for i := 0; i < n; i++ {
+		out[i] = base[i%len(base)]
+	}
+	return out
 }
