@@ -57,6 +57,10 @@ func main() {
 		developmentTime, _ := strconv.Atoi(os.Args[3])
 		reviewTime, _ := strconv.Atoi(os.Args[4])
 		TimerSetting(planningTime, developmentTime, reviewTime)
+	case "progress":
+		ShowProgress()
+	case "contribution":
+		ShowContribution()
 	default:
 		fmt.Println("Unknown command:", cmd)
 	}
