@@ -30,6 +30,13 @@ type Task struct {
 	Assignees    string `json:"assignees"`
 }
 
+type Timer struct {
+	Plannning    int `json:"planning"`
+	Development  int `json:"development"`
+	Review       int `json:"review"`
+	SprintNumber int `json:"sprint_number"`
+}
+
 const dataFile = "todo.json"
 const timersettingFile = "timer_setting.json"
 
@@ -94,7 +101,7 @@ func loadTasks() ([]Task, error) {
 	return tasks, nil
 }
 
-func loadTimerSettings() (map[string]int, error) {
+func loadTimerSettings() (*Timer, error) {
 	file, err := os.Open(timersettingFile)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -104,7 +111,7 @@ func loadTimerSettings() (map[string]int, error) {
 	}
 	defer file.Close()
 
-	var settings map[string]int
+	var settings *Timer
 	if err := json.NewDecoder(file).Decode(&settings); err != nil {
 		return nil, err
 	}
@@ -327,16 +334,16 @@ func TimerStartSprint() {
 	}
 	if settings == nil {
 		// デフォルトのタイマー設定を使用
-		settings = map[string]int{
-			"planning":      15, // スプリント計画: 15分
-			"development":   60, // 開発: 60分
-			"review":        15, // スプリントレビュー＋振り返り: 15分
-			"sprint_number": 0,
+		settings = &Timer{
+			Plannning:    15,
+			Development:  60,
+			Review:       15,
+			SprintNumber: 0,
 		}
 		fmt.Println("タイマー設定ファイルが見つからないため、デフォルト値を使用します。")
 	} else {
 		fmt.Printf("スプリント番号 : %d, スプリント計画: %d分, 開発: %d分, スプリントレビュー＋振り返り: %d分\n",
-			settings["sprint_number"], settings["planning"], settings["development"], settings["review"])
+			settings.SprintNumber, settings.Plannning, settings.Development, settings.Review)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -347,22 +354,22 @@ func TimerStartSprint() {
 
 	go func() {
 
-		fmt.Printf("スプリントプランニング（%d分）を開始します\n", settings["planning"])
-		timerMinutes(settings["planning"])
+		fmt.Printf("スプリントプランニング（%d分）を開始します\n", settings.Plannning)
+		timerMinutes(settings.Plannning)
 		fmt.Println("スプリント計画が終了しました")
 
-		fmt.Println("開発（%d分）を開始します", settings["development"])
-		ListDoingTasks(settings["sprint_number"])
-		timerMinutes(settings["development"])
+		fmt.Println("開発（%d分）を開始します", settings.Development)
+		ListDoingTasks(settings.SprintNumber)
+		timerMinutes(settings.Development)
 		fmt.Println("開発が終了しました")
 
-		fmt.Println("スプリントレビュー＋振り返り（%d分）を開始します", settings["review"])
-		timerMinutes(settings["review"])
+		fmt.Println("スプリントレビュー＋振り返り（%d分）を開始します", settings.Review)
+		timerMinutes(settings.Review)
 		fmt.Println("スプリントレビュー＋振り返りが終了しました")
 
 		fmt.Println("=== スプリントタイムボックス終了 ===")
 
-		settings["sprint_number"] += 1
+		settings.SprintNumber += 1
 
 		file, err := os.Create(timersettingFile)
 		if err != nil {
@@ -397,16 +404,16 @@ func TimerSetting(planningTime, developmentTime, reviewTime int) {
 		panic(err)
 	}
 
-	timerSettings := map[string]int{
-		"planning":    planningTime,
-		"development": developmentTime,
-		"review":      reviewTime,
+	timerSettings := Timer{
+		Plannning:   planningTime,
+		Development: developmentTime,
+		Review:      reviewTime,
 	}
 
 	if settings == nil {
-		timerSettings["sprint_number"] = 1
+		timerSettings.SprintNumber = 1
 	} else {
-		timerSettings["sprint_number"] = settings["sprint_number"]
+		timerSettings.SprintNumber = settings.SprintNumber
 	}
 
 	file, err := os.Create(timersettingFile)
