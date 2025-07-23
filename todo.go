@@ -1,14 +1,15 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/olekukonko/tablewriter"
 	"os"
 	"strconv"
+	"strings"
 	"time"
-	"bufio"
-	"context"
 )
 
 type Task struct {
@@ -202,23 +203,23 @@ func DeleteTask(id int) {
 }
 
 func TimerStartSprint() {
-    //jsonの読み込み
-    settings, err := loadTimerSettings()
-    if err != nil {
-        panic(err)
-    }	
-    if settings == nil {
-        // デフォルトのタイマー設定を使用
-        settings = map[string]int{
-            "planning":    15, // スプリント計画: 15分
-            "development": 60, // 開発: 60分
-            "review":      15, // スプリントレビュー＋振り返り: 15分
-        }
-        fmt.Println("タイマー設定ファイルが見つからないため、デフォルト値を使用します。")
-    } else {
-        fmt.Printf("スプリント計画: %d分, 開発: %d分, スプリントレビュー＋振り返り: %d分\n",
-            settings["planning"], settings["development"], settings["review"])
-    }
+	//jsonの読み込み
+	settings, err := loadTimerSettings()
+	if err != nil {
+		panic(err)
+	}
+	if settings == nil {
+		// デフォルトのタイマー設定を使用
+		settings = map[string]int{
+			"planning":    15, // スプリント計画: 15分
+			"development": 60, // 開発: 60分
+			"review":      15, // スプリントレビュー＋振り返り: 15分
+		}
+		fmt.Println("タイマー設定ファイルが見つからないため、デフォルト値を使用します。")
+	} else {
+		fmt.Printf("スプリント計画: %d分, 開発: %d分, スプリントレビュー＋振り返り: %d分\n",
+			settings["planning"], settings["development"], settings["review"])
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel() // 安全のため
@@ -226,36 +227,43 @@ func TimerStartSprint() {
 	// ── 入力受付を並列実行
 	go listenInput(ctx, cancel)
 
-	fmt.Printf("スプリントプランニング（%d分）を開始します\n", settings["planning"])
-    timerMinutes(settings["planning"])
-    fmt.Println("スプリント計画が終了しました")
+	go func() {
 
-    fmt.Println("開発（%d分）を開始します", settings["development"])
-    timerMinutes(settings["development"])
-    fmt.Println("開発が終了しました")
+		fmt.Printf("スプリントプランニング（%d分）を開始します\n", settings["planning"])
+		timerMinutes(settings["planning"])
+		fmt.Println("スプリント計画が終了しました")
 
-    fmt.Println("スプリントレビュー＋振り返り（%d分）を開始します", settings["review"])
-    timerMinutes(settings["review"])
-    fmt.Println("スプリントレビュー＋振り返りが終了しました")
+		fmt.Println("開発（%d分）を開始します", settings["development"])
+		timerMinutes(settings["development"])
+		fmt.Println("開発が終了しました")
 
-    fmt.Println("=== スプリントタイムボックス終了 ===")
+		fmt.Println("スプリントレビュー＋振り返り（%d分）を開始します", settings["review"])
+		timerMinutes(settings["review"])
+		fmt.Println("スプリントレビュー＋振り返りが終了しました")
+
+		fmt.Println("=== スプリントタイムボックス終了 ===")
+		cancel()
+
+	}()
+
+	<-ctx.Done()
 }
 
 // 分数を受け取ってタイマー表示する補助関数
 func timerMinutes(min int) {
-    totalSec := min * 60
-    for i := totalSec; i > 0; i-- {
-        fmt.Printf("\r残り: %d分%d秒", i/60, i%60)
-        time.Sleep(1 * time.Second)
-    }
-    fmt.Println("\nタイマー終了")
+	totalSec := min * 60
+	for i := totalSec; i > 0; i-- {
+		fmt.Fprintf(os.Stderr, "\r[タイマー] 残り: %2d分%02d秒", i/60, i%60)
+		time.Sleep(1 * time.Second)
+	}
+	fmt.Fprintln(os.Stderr, "\n[タイマー] タイマー終了")
 }
 
 func TimerSetting(planningTime, developmentTime, reviewTime int) {
 	timerSettings := map[string]int{
-		"planning":  planningTime,
+		"planning":    planningTime,
 		"development": developmentTime,
-		"review":     reviewTime,
+		"review":      reviewTime,
 	}
 
 	file, err := os.Create(timersettingFile)
@@ -274,7 +282,7 @@ func listenInput(ctx context.Context, cancel context.CancelFunc) {
 	for {
 		fmt.Print("\nコマンド > ")
 		if !sc.Scan() {
-			cancel();
+			cancel()
 			return
 		}
 		inputs := strings.Split(sc.Text(), " ")
@@ -317,7 +325,7 @@ func listenInput(ctx context.Context, cancel context.CancelFunc) {
 			cancel()
 			return
 		case "help":
-			fmt.println("<Usage>\nAddTask : add <title> <sprintNumber> <taskWeight> ")
+			fmt.Println("<Usage>\nAddTask : add <title> <sprintNumber> <taskWeight>\nListTasks :  list\nAssignTask : assign <TaskID> <UserName>\nCompleteTask : complete <TaskID>\nDeleteTask : delete <TaskID>\nExitSprint : exit ")
 		default:
 			fmt.Println("不明なコマンド")
 		}
