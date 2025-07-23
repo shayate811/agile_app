@@ -35,6 +35,9 @@ func main() {
 		name := ""
 		if len(os.Args) >= 4 {
 			name = os.Args[3]
+		} else {
+			fmt.Println("Usage: todo assign <taskID> <name>")
+			return
 		}
 		AssignTask(id, name)
 	case "complete":
@@ -56,6 +59,8 @@ func main() {
 		TimerSetting(planningTime, developmentTime, reviewTime)
 	case "progress":
 		ShowProgress()
+	case "contribution":
+		ShowContribution()
 	default:
 		fmt.Println("Unknown command:", cmd)
 	}
