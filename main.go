@@ -47,7 +47,7 @@ func main() {
 		id, _ := strconv.Atoi(os.Args[2])
 		DeleteTask(id)
 	case "timerstart":
-		TimerStartSprint()
+		TimerStartSprintTUI()
 	case "timersetting":
 		if len(os.Args) < 5 {
 			fmt.Println("Usage: todo timersetting <planningTime> <developmentTime> <reviewTime>")

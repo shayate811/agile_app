@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/benoitmasson/plotters/piechart"
+	"github.com/gdamore/tcell/v2"
 	"github.com/olekukonko/tablewriter"
+	"github.com/rivo/tview"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
@@ -669,5 +671,136 @@ func listenInput(ctx context.Context, cancel context.CancelFunc) {
 			return
 		default:
 		}
+	}
+}
+
+func saveTimerSettings(t *Timer) error {
+	file, err := os.Create(timersettingFile)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	return json.NewEncoder(file).Encode(t)
+}
+func TimerStartSprintTUI() {
+	settings, err := loadTimerSettings()
+	if err != nil {
+		panic(err)
+	}
+	if settings == nil {
+		settings = &Timer{
+			Plannning:    15,
+			Development:  60,
+			Review:       15,
+			SprintNumber: 0,
+		}
+	}
+
+	app := tview.NewApplication()
+	timerText := tview.NewTextView().SetTextAlign(tview.AlignCenter).SetTextColor(tcell.ColorGreen)
+	output := tview.NewTextView().SetDynamicColors(true).SetChangedFunc(func() {
+		app.Draw()
+	})
+	input := tview.NewInputField().SetLabel("Command > ").SetFieldWidth(40)
+
+	layout := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(timerText, 1, 0, false).
+		AddItem(output, 0, 1, false).
+		AddItem(input, 1, 0, true)
+
+	// コマンド処理
+	input.SetDoneFunc(func(key tcell.Key) {
+		cmd := input.GetText()
+		input.SetText("")
+		handleTUIViewCommand(cmd, output, app, settings, timerText)
+		if strings.TrimSpace(cmd) == "exit" {
+			app.Stop()
+		}
+	})
+
+	// タイマー＆フェーズ進行
+	go func() {
+		runPhase := func(name string, minutes int) {
+			for i := minutes * 60; i >= 0; i-- {
+				app.QueueUpdateDraw(func() {
+					timerText.SetText(fmt.Sprintf("[タイマー] %s 残り: %02d:%02d", name, i/60, i%60))
+				})
+				time.Sleep(time.Second)
+			}
+			app.QueueUpdateDraw(func() {
+				fmt.Fprintf(output, "[green]%s 終了\n", name)
+			})
+		}
+
+		runPhase("スプリント計画", settings.Plannning)
+
+		app.QueueUpdateDraw(func() {
+			fmt.Fprintf(output, "\n[::b]Doing タスク:\n")
+			tasks, _ := loadTasks()
+			for _, t := range tasks {
+				if t.SprintNumber == settings.SprintNumber && t.Assignees != "" && !t.Done {
+					fmt.Fprintf(output, "- #%d %s [%s] (%dpt)\n", t.ID, t.Title, t.Assignees, t.TaskWeight)
+				}
+			}
+		})
+
+		runPhase("開発", settings.Development)
+		runPhase("レビュー", settings.Review)
+
+		settings.SprintNumber++
+		_ = saveTimerSettings(settings)
+		app.QueueUpdateDraw(func() {
+			fmt.Fprintln(output, "[blue]=== スプリント終了 ===")
+		})
+	}()
+
+	if err := app.SetRoot(layout, true).EnableMouse(true).Run(); err != nil {
+		panic(err)
+	}
+}
+
+func handleTUIViewCommand(cmd string, out *tview.TextView, app *tview.Application, timer *Timer, timerText *tview.TextView) {
+	parts := strings.Fields(cmd)
+	if len(parts) == 0 {
+		return
+	}
+	switch parts[0] {
+	case "add":
+		if len(parts) < 4 {
+			fmt.Fprintln(out, "[red]add <title> <sprintNumber> <taskWeight>")
+			return
+		}
+		sn, _ := strconv.Atoi(parts[2])
+		tw, _ := strconv.Atoi(parts[3])
+		AddTask(parts[1], sn, tw)
+		fmt.Fprintln(out, "[green]タスク追加")
+	case "complete":
+		if len(parts) < 2 {
+			fmt.Fprintln(out, "[red]complete <TaskID>")
+			return
+		}
+		id, _ := strconv.Atoi(parts[1])
+		CompleteTask(id)
+		fmt.Fprintln(out, "[green]タスク完了")
+	case "delete":
+		id, _ := strconv.Atoi(parts[1])
+		DeleteTask(id)
+		fmt.Fprintln(out, "[green]タスク削除")
+	case "assign":
+		if len(parts) < 3 {
+			fmt.Fprintln(out, "[red]assign <TaskID> <UserName>")
+			return
+		}
+		id, _ := strconv.Atoi(parts[1])
+		name := ""
+		if len(parts) >= 3 {
+			name = parts[2]
+		}
+		AssignTask(id, name)
+		fmt.Fprintln(out, "[green]アサイン完了")
+	case "exit":
+		fmt.Fprintln(out, "[gray]終了コマンドを受け付けました")
+	default:
+		fmt.Fprintln(out, "[yellow]未知のコマンド")
 	}
 }
