@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/benoitmasson/plotters/piechart"
+	"github.com/gdamore/tcell/v2"
 	"github.com/olekukonko/tablewriter"
+	"github.com/rivo/tview"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
@@ -28,6 +30,13 @@ type Task struct {
 	SprintNumber int    `json:"sprint_number,omitempty"` // Optional field for sprint number
 	TaskWeight   int    `json:"task_weight,omitempty"`   // Optional field for task weight
 	Assignees    string `json:"assignees"`
+}
+
+type Timer struct {
+	Plannning    int `json:"planning"`
+	Development  int `json:"development"`
+	Review       int `json:"review"`
+	SprintNumber int `json:"sprint_number"`
 }
 
 const dataFile = "todo.json"
@@ -94,7 +103,7 @@ func loadTasks() ([]Task, error) {
 	return tasks, nil
 }
 
-func loadTimerSettings() (map[string]int, error) {
+func loadTimerSettings() (*Timer, error) {
 	file, err := os.Open(timersettingFile)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -104,7 +113,7 @@ func loadTimerSettings() (map[string]int, error) {
 	}
 	defer file.Close()
 
-	var settings map[string]int
+	var settings *Timer
 	if err := json.NewDecoder(file).Decode(&settings); err != nil {
 		return nil, err
 	}
@@ -176,6 +185,70 @@ func ListTasks() {
 	}
 
 	table.Render()
+}
+
+func ListDoingTasks(sprint int) {
+	tasks, err := loadTasks()
+	if err != nil {
+		panic(err)
+	}
+
+	// フィルタ & グループ分け
+	todo := []Task{}
+	doing := []Task{}
+	done := []Task{}
+	for _, task := range tasks {
+		if task.SprintNumber <= sprint {
+			if task.Done == true {
+				done = append(done, task)
+			} else if strings.TrimSpace(task.Assignees) == "" {
+				todo = append(todo, task)
+			} else {
+				doing = append(doing, task)
+			}
+		}
+	}
+
+	// ソート（どちらも同様に）
+	sortTasks := func(ts []Task) {
+		sort.Slice(ts, func(i, j int) bool {
+			if ts[i].SprintNumber == ts[j].SprintNumber {
+				return ts[i].ID < ts[j].ID
+			}
+			return ts[i].SprintNumber < ts[j].SprintNumber
+		})
+	}
+	sortTasks(todo)
+	sortTasks(doing)
+	sortTasks(done)
+
+	// 表示関数
+	renderTable := func(title string, ts []Task) {
+		fmt.Printf("\n=== %s ===\n", title)
+		table := tablewriter.NewWriter(os.Stdout)
+		table.SetHeader([]string{"ID", "Title", "Sprint", "Weight", "Assignees", "Status"})
+		for _, t := range ts {
+			status := "[ ]"
+			if t.Done {
+				status = "[x]"
+			}
+			row := []string{
+				strconv.Itoa(t.ID),
+				t.Title,
+				strconv.Itoa(t.SprintNumber),
+				strconv.Itoa(t.TaskWeight),
+				t.Assignees,
+				status,
+			}
+			table.Append(row)
+		}
+		table.Render()
+	}
+
+	// 出力
+	renderTable("Todo", todo)
+	renderTable("Doing", doing)
+	renderTable("Done", done)
 }
 
 func AssignTask(id int, name string) {
@@ -263,16 +336,16 @@ func TimerStartSprint() {
 	}
 	if settings == nil {
 		// デフォルトのタイマー設定を使用
-		settings = map[string]int{
-			"planning":      15, // スプリント計画: 15分
-			"development":   60, // 開発: 60分
-			"review":        15, // スプリントレビュー＋振り返り: 15分
-			"sprint_number": 0,
+		settings = &Timer{
+			Plannning:    15,
+			Development:  60,
+			Review:       15,
+			SprintNumber: 0,
 		}
 		fmt.Println("タイマー設定ファイルが見つからないため、デフォルト値を使用します。")
 	} else {
 		fmt.Printf("スプリント番号 : %d, スプリント計画: %d分, 開発: %d分, スプリントレビュー＋振り返り: %d分\n",
-			settings["sprint_number"], settings["planning"], settings["development"], settings["review"])
+			settings.SprintNumber, settings.Plannning, settings.Development, settings.Review)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -283,24 +356,38 @@ func TimerStartSprint() {
 
 	go func() {
 
-		fmt.Printf("スプリントプランニング（%d分）を開始します\n", settings["planning"])
-		timerMinutes(settings["planning"])
+		fmt.Printf("スプリントプランニング（%d分）を開始します\n", settings.Plannning)
+		timerMinutes(settings.Plannning)
 		fmt.Println("スプリント計画が終了しました")
 
-		fmt.Println("開発（%d分）を開始します", settings["development"])
-		timerMinutes(settings["development"])
+		fmt.Println("開発（%d分）を開始します", settings.Development)
+		ListDoingTasks(settings.SprintNumber)
+		timerMinutes(settings.Development)
 		fmt.Println("開発が終了しました")
 
-		fmt.Println("スプリントレビュー＋振り返り（%d分）を開始します", settings["review"])
-		timerMinutes(settings["review"])
+		fmt.Println("スプリントレビュー＋振り返り（%d分）を開始します", settings.Review)
+		timerMinutes(settings.Review)
 		fmt.Println("スプリントレビュー＋振り返りが終了しました")
 
 		fmt.Println("=== スプリントタイムボックス終了 ===")
+
+		settings.SprintNumber += 1
+
+		file, err := os.Create(timersettingFile)
+		if err != nil {
+			panic(err)
+		}
+		defer file.Close()
+
+		if err := json.NewEncoder(file).Encode(settings); err != nil {
+			panic(err)
+		}
 		cancel()
 
 	}()
 
 	<-ctx.Done()
+
 }
 
 // 分数を受け取ってタイマー表示する補助関数
@@ -319,16 +406,16 @@ func TimerSetting(planningTime, developmentTime, reviewTime int) {
 		panic(err)
 	}
 
-	timerSettings := map[string]int{
-		"planning":    planningTime,
-		"development": developmentTime,
-		"review":      reviewTime,
+	timerSettings := Timer{
+		Plannning:   planningTime,
+		Development: developmentTime,
+		Review:      reviewTime,
 	}
 
 	if settings == nil {
-		timerSettings["sprint_number"] = 1
+		timerSettings.SprintNumber = 1
 	} else {
-		timerSettings["sprint_number"] = settings["sprint_number"]
+		timerSettings.SprintNumber = settings.SprintNumber
 	}
 
 	file, err := os.Create(timersettingFile)
@@ -584,5 +671,136 @@ func listenInput(ctx context.Context, cancel context.CancelFunc) {
 			return
 		default:
 		}
+	}
+}
+
+func saveTimerSettings(t *Timer) error {
+	file, err := os.Create(timersettingFile)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	return json.NewEncoder(file).Encode(t)
+}
+func TimerStartSprintTUI() {
+	settings, err := loadTimerSettings()
+	if err != nil {
+		panic(err)
+	}
+	if settings == nil {
+		settings = &Timer{
+			Plannning:    15,
+			Development:  60,
+			Review:       15,
+			SprintNumber: 0,
+		}
+	}
+
+	app := tview.NewApplication()
+	timerText := tview.NewTextView().SetTextAlign(tview.AlignCenter).SetTextColor(tcell.ColorGreen)
+	output := tview.NewTextView().SetDynamicColors(true).SetChangedFunc(func() {
+		app.Draw()
+	})
+	input := tview.NewInputField().SetLabel("Command > ").SetFieldWidth(40)
+
+	layout := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(timerText, 1, 0, false).
+		AddItem(output, 0, 1, false).
+		AddItem(input, 1, 0, true)
+
+	// コマンド処理
+	input.SetDoneFunc(func(key tcell.Key) {
+		cmd := input.GetText()
+		input.SetText("")
+		handleTUIViewCommand(cmd, output, app, settings, timerText)
+		if strings.TrimSpace(cmd) == "exit" {
+			app.Stop()
+		}
+	})
+
+	// タイマー＆フェーズ進行
+	go func() {
+		runPhase := func(name string, minutes int) {
+			for i := minutes * 60; i >= 0; i-- {
+				app.QueueUpdateDraw(func() {
+					timerText.SetText(fmt.Sprintf("[タイマー] %s 残り: %02d:%02d", name, i/60, i%60))
+				})
+				time.Sleep(time.Second)
+			}
+			app.QueueUpdateDraw(func() {
+				fmt.Fprintf(output, "[green]%s 終了\n", name)
+			})
+		}
+
+		runPhase("スプリント計画", settings.Plannning)
+
+		app.QueueUpdateDraw(func() {
+			fmt.Fprintf(output, "\n[::b]Doing タスク:\n")
+			tasks, _ := loadTasks()
+			for _, t := range tasks {
+				if t.SprintNumber == settings.SprintNumber && t.Assignees != "" && !t.Done {
+					fmt.Fprintf(output, "- #%d %s [%s] (%dpt)\n", t.ID, t.Title, t.Assignees, t.TaskWeight)
+				}
+			}
+		})
+
+		runPhase("開発", settings.Development)
+		runPhase("レビュー", settings.Review)
+
+		settings.SprintNumber++
+		_ = saveTimerSettings(settings)
+		app.QueueUpdateDraw(func() {
+			fmt.Fprintln(output, "[blue]=== スプリント終了 ===")
+		})
+	}()
+
+	if err := app.SetRoot(layout, true).EnableMouse(true).Run(); err != nil {
+		panic(err)
+	}
+}
+
+func handleTUIViewCommand(cmd string, out *tview.TextView, app *tview.Application, timer *Timer, timerText *tview.TextView) {
+	parts := strings.Fields(cmd)
+	if len(parts) == 0 {
+		return
+	}
+	switch parts[0] {
+	case "add":
+		if len(parts) < 4 {
+			fmt.Fprintln(out, "[red]add <title> <sprintNumber> <taskWeight>")
+			return
+		}
+		sn, _ := strconv.Atoi(parts[2])
+		tw, _ := strconv.Atoi(parts[3])
+		AddTask(parts[1], sn, tw)
+		fmt.Fprintln(out, "[green]タスク追加")
+	case "complete":
+		if len(parts) < 2 {
+			fmt.Fprintln(out, "[red]complete <TaskID>")
+			return
+		}
+		id, _ := strconv.Atoi(parts[1])
+		CompleteTask(id)
+		fmt.Fprintln(out, "[green]タスク完了")
+	case "delete":
+		id, _ := strconv.Atoi(parts[1])
+		DeleteTask(id)
+		fmt.Fprintln(out, "[green]タスク削除")
+	case "assign":
+		if len(parts) < 3 {
+			fmt.Fprintln(out, "[red]assign <TaskID> <UserName>")
+			return
+		}
+		id, _ := strconv.Atoi(parts[1])
+		name := ""
+		if len(parts) >= 3 {
+			name = parts[2]
+		}
+		AssignTask(id, name)
+		fmt.Fprintln(out, "[green]アサイン完了")
+	case "exit":
+		fmt.Fprintln(out, "[gray]終了コマンドを受け付けました")
+	default:
+		fmt.Fprintln(out, "[yellow]未知のコマンド")
 	}
 }
