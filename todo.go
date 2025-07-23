@@ -10,15 +10,15 @@ import (
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
 	"gonum.org/v1/plot/vg"
+	"hash/fnv"
+	"image/color"
+	"log"
+	"math"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
-	"image/color"
-	"log"
-	"hash/fnv"
-	"math"
 )
 
 type Task struct {
@@ -40,15 +40,15 @@ func ColorFromName(name string) color.RGBA {
 	h := fnv.New64a()
 	h.Write([]byte(name))
 	hash := h.Sum64()
- 
+
 	// 2) ハッシュ値 → 0–359 の Hue
 	hue := float64(hash % 360)
-	sat := 0.55 // 彩度
+	sat := 0.55   // 彩度
 	light := 0.60 // 輝度
- 
+
 	return hslToRGBA(hue, sat, light)
 }
- 
+
 // --- 内部関数: HSL → RGBA -----------------------------------------
 func hslToRGBA(h, s, l float64) color.RGBA {
 	c := (1 - math.Abs(2*l-1)) * s
@@ -264,9 +264,9 @@ func TimerStartSprint() {
 	if settings == nil {
 		// デフォルトのタイマー設定を使用
 		settings = map[string]int{
-			"planning":    15, // スプリント計画: 15分
-			"development": 60, // 開発: 60分
-			"review":      15, // スプリントレビュー＋振り返り: 15分
+			"planning":      15, // スプリント計画: 15分
+			"development":   60, // 開発: 60分
+			"review":        15, // スプリントレビュー＋振り返り: 15分
 			"sprint_number": 0,
 		}
 		fmt.Println("タイマー設定ファイルが見つからないため、デフォルト値を使用します。")
@@ -343,91 +343,91 @@ func TimerSetting(planningTime, developmentTime, reviewTime int) {
 }
 
 func ShowProgress() {
-    tasks, err := loadTasks()
-    if err != nil {
-        panic(err)
-    }
+	tasks, err := loadTasks()
+	if err != nil {
+		panic(err)
+	}
 
-    // assigneeごとに重みを集計
-    type progress struct {
-        doneWeight  int
-        totalWeight int
-    }
-    progressMap := make(map[string]*progress)
+	// assigneeごとに重みを集計
+	type progress struct {
+		doneWeight  int
+		totalWeight int
+	}
+	progressMap := make(map[string]*progress)
 
-    for _, task := range tasks {
-        name := task.Assignees
-        if name == "" {
-            continue // 未割り当てタスクは集計しない
-        }
-        if _, ok := progressMap[name]; !ok {
-            progressMap[name] = &progress{}
-        }
-        progressMap[name].totalWeight += task.TaskWeight
-        if task.Done {
-            progressMap[name].doneWeight += task.TaskWeight
-        }
-    }
+	for _, task := range tasks {
+		name := task.Assignees
+		if name == "" {
+			continue // 未割り当てタスクは集計しない
+		}
+		if _, ok := progressMap[name]; !ok {
+			progressMap[name] = &progress{}
+		}
+		progressMap[name].totalWeight += task.TaskWeight
+		if task.Done {
+			progressMap[name].doneWeight += task.TaskWeight
+		}
+	}
 
-    // 表示用にソート
-    names := make([]string, 0, len(progressMap))
-    for name := range progressMap {
-        names = append(names, name)
-    }
-    sort.Strings(names)
+	// 表示用にソート
+	names := make([]string, 0, len(progressMap))
+	for name := range progressMap {
+		names = append(names, name)
+	}
+	sort.Strings(names)
 
-    // テーブル表示
-    fmt.Println("作業者\t完了重み/担当重み\t進捗率")
-    fmt.Println("-------------------------------------")
-    for _, name := range names {
-        p := progressMap[name]
-        rate := 0
-        if p.totalWeight > 0 {
-            rate = p.doneWeight * 100 / p.totalWeight
-        }
-        fmt.Printf("%s\t%d/%d\t\t%d%%\n", name, p.doneWeight, p.totalWeight, rate)
-    }
+	// テーブル表示
+	fmt.Println("作業者\t完了重み/担当重み\t進捗率")
+	fmt.Println("-------------------------------------")
+	for _, name := range names {
+		p := progressMap[name]
+		rate := 0
+		if p.totalWeight > 0 {
+			rate = p.doneWeight * 100 / p.totalWeight
+		}
+		fmt.Printf("%s\t%d/%d\t\t%d%%\n", name, p.doneWeight, p.totalWeight, rate)
+	}
 
-    // グラフ用データ作成
-    p := plot.New()
-    p.Title.Text = "Progress by Assignee"
-    p.Y.Label.Text = "Progress (%)"
-    p.NominalX(names...)
+	// グラフ用データ作成
+	p := plot.New()
+	p.Title.Text = "Progress by Assignee"
+	p.Y.Label.Text = "Progress (%)"
+	p.NominalX(names...)
 
-    // 各作業者ごとに1本ずつBarChartを重ねて色分け
-    for i, name := range names {
-        prog := progressMap[name]
-        var rate float64
-        if prog.totalWeight > 0 {
-            rate = float64(prog.doneWeight) / float64(prog.totalWeight) * 100
-        }
-        vals := make(plotter.Values, len(names))
-        vals[i] = rate // 他は0
-        bar, err := plotter.NewBarChart(vals, vg.Points(30))
-        if err != nil {
-            fmt.Println("グラフ生成に失敗しました:", err)
-            return
-        }
-        bar.LineStyle.Width = vg.Length(0)
-        bar.Color = ColorFromName(name) // 名前から色を取得
-        p.Add(bar)
-    }
-    p.Y.Max = 100
+	// 各作業者ごとに1本ずつBarChartを重ねて色分け
+	for i, name := range names {
+		prog := progressMap[name]
+		var rate float64
+		if prog.totalWeight > 0 {
+			rate = float64(prog.doneWeight) / float64(prog.totalWeight) * 100
+		}
+		vals := make(plotter.Values, len(names))
+		vals[i] = rate // 他は0
+		bar, err := plotter.NewBarChart(vals, vg.Points(30))
+		if err != nil {
+			fmt.Println("グラフ生成に失敗しました:", err)
+			return
+		}
+		bar.LineStyle.Width = vg.Length(0)
+		bar.Color = ColorFromName(name) // 名前から色を取得
+		p.Add(bar)
+	}
+	p.Y.Max = 100
 
-    // 横軸ラベルの角度を調整
-    p.X.Tick.Label.Rotation = 0.5 // 0.5ラジアン（約30度）傾ける
+	// 横軸ラベルの角度を調整
+	p.X.Tick.Label.Rotation = 0.5 // 0.5ラジアン（約30度）傾ける
 
-    // 余白を設定
-    p.X.Padding = vg.Points(40)
-    p.X.Min = -0.5
-    p.X.Max = float64(len(names)) - 0.5
+	// 余白を設定
+	p.X.Padding = vg.Points(40)
+	p.X.Min = -0.5
+	p.X.Max = float64(len(names)) - 0.5
 
-    // グラフ画像として保存
-    if err := p.Save(8*vg.Inch, 4*vg.Inch, "progress.png"); err != nil {
-        fmt.Println("グラフ画像の保存に失敗しました:", err)
-        return
-    }
-    fmt.Println("進捗グラフ(progress.png)を出力しました。")
+	// グラフ画像として保存
+	if err := p.Save(8*vg.Inch, 4*vg.Inch, "progress.png"); err != nil {
+		fmt.Println("グラフ画像の保存に失敗しました:", err)
+		return
+	}
+	fmt.Println("進捗グラフ(progress.png)を出力しました。")
 }
 
 func ShowContribution() {
@@ -436,10 +436,10 @@ func ShowContribution() {
 	if err != nil {
 		log.Fatalf("loadTasks 失敗: %v", err)
 	}
- 
+
 	contrib := make(map[string]float64)
 	var unfinishedWeight float64
- 
+
 	for _, t := range tasks {
 		if t.Done {
 			name := t.Assignees
@@ -451,11 +451,11 @@ func ShowContribution() {
 			unfinishedWeight += float64(t.TaskWeight)
 		}
 	}
- 
+
 	// ==== 2. 円グラフ用データ作成 ==========================================
 	labels := make([]string, 0, len(contrib)+1)
 	values := make(plotter.Values, 0, len(contrib)+1)
- 
+
 	for n, w := range contrib {
 		labels = append(labels, n)
 		values = append(values, w)
@@ -464,50 +464,50 @@ func ShowContribution() {
 		labels = append(labels, "Unfinished")
 		values = append(values, unfinishedWeight)
 	}
- 
+
 	// ==== 3. グラフベース生成 ==============================================
 	p := plot.New()
 	p.Title.Text = "Task Contribution"
 	p.HideAxes() // 円グラフなので軸は非表示
- 
+
 	// ==== 4. スライスごとに PieChart を生成して色分け =======================
 	total := 0.0
 	for _, v := range values {
 		total += v
 	}
- 
+
 	offset := 0.0
- 
+
 	for i, v := range values {
 		// 4‑1) 1スライスだけをもつ PieChart を生成
 		pc, err := piechart.NewPieChart(plotter.Values{v})
 		if err != nil {
 			log.Fatalf("piechart 生成失敗: %v", err)
 		}
- 
+
 		// 4‑2) 色と開始位置・合計値を設定
 		pc.Color = ColorFromName(labels[i])
 		pc.Offset.Value = offset
 		pc.Total = total
- 
+
 		// 4‑3) ラベル表示設定
 		pc.Labels.Show = true
 		pc.Labels.Nominal = []string{labels[i]}
 		pc.Labels.Values.Show = true
 		pc.Labels.Values.Percentage = true // 割合表示
- 
+
 		// 4‑4) 追加
 		p.Add(pc)
 		offset += v
 	}
- 
+
 	// ==== 5. 保存 ==========================================================
 	if err := p.Save(6*vg.Inch, 6*vg.Inch, "contribution.png"); err != nil {
 		log.Fatalf("画像保存失敗: %v", err)
 	}
 	fmt.Println("貢献度円グラフを出力しました → contribution.png")
 }
- 
+
 // defaultColors は必要数だけ色を返す簡易パレット
 func defaultColors(n int) []color.Color {
 	base := []color.Color{
