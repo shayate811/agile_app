@@ -1,4 +1,4 @@
-module todo-app
+module github.com/shayate811/agile_app
 
 go 1.18
 
